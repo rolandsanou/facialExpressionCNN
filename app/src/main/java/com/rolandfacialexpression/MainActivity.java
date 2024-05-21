@@ -50,6 +50,7 @@ import java.nio.ByteOrder;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
 import java.text.SimpleDateFormat;
+import java.util.Arrays;
 import java.util.Date;
 import java.util.Locale;
 import java.util.concurrent.ExecutionException;
@@ -65,17 +66,14 @@ public class MainActivity extends AppCompatActivity {
     private ImageCapture imageCapture;
 
     private static final String[] emotions = {"Angry", "Disgust", "Fear", "Happy", "Sad", "Surprise", "Neutral"};
-
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-
         previewView = findViewById(R.id.view_finder);
         resultTextView = findViewById(R.id.result_text);
         captureButton = findViewById(R.id.capture_button);
         selectButton = findViewById(R.id.select_button);
-
         // Request camera permissions
         if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED ||
                 ContextCompat.checkSelfPermission(this,
@@ -84,20 +82,17 @@ public class MainActivity extends AppCompatActivity {
         } else {
             startCamera();
         }
-
         try {
             tflite = new Interpreter(loadModelFile());
         } catch (IOException e) {
             e.printStackTrace();
         }
-
         captureButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 captureAndRecognize();
             }
         });
-
         selectButton.setOnClickListener(v -> {
             Intent galleryIntent = new Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI);
             startActivityForResult(galleryIntent, GALLERY_REQUEST_CODE);
@@ -182,10 +177,10 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private MappedByteBuffer loadModelFile() throws IOException {
-        FileInputStream fileInputStream = new FileInputStream(getAssets().openFd("model.tflite").getFileDescriptor());
+        FileInputStream fileInputStream = new FileInputStream(getAssets().openFd("facial_recognition_model.tflite").getFileDescriptor());
         FileChannel fileChannel = fileInputStream.getChannel();
-        long startOffset = getAssets().openFd("model.tflite").getStartOffset();
-        long declaredLength = getAssets().openFd("model.tflite").getDeclaredLength();
+        long startOffset = getAssets().openFd("facial_recognition_model.tflite").getStartOffset();
+        long declaredLength = getAssets().openFd("facial_recognition_model.tflite").getDeclaredLength();
         return fileChannel.map(FileChannel.MapMode.READ_ONLY, startOffset, declaredLength);
     }
 
@@ -235,15 +230,30 @@ public class MainActivity extends AppCompatActivity {
         for (float val : output[0]) {
             sum += val;
         }
-
-        StringBuilder result = new StringBuilder();
+        // Create an array to store percentages and their corresponding indices
+        float[] percentages = new float[output[0].length];
         for (int i = 0; i < output[0].length; i++) {
-            float percentage = (output[0][i] / sum) * 100;
-            result.append(emotions[i]).append(": ").append(String.format("%.2f", percentage)).append("%\n");
+            percentages[i] = (output[0][i] / sum) * 100;
+        }
+        // Create an array of indices to sort by percentage
+        Integer[] indices = new Integer[percentages.length];
+        for (int i = 0; i < indices.length; i++) {
+            indices[i] = i;
+        }
+        // Sort the indices array based on corresponding percentage values in descending order
+        Arrays.sort(indices, (a, b) -> Float.compare(percentages[b], percentages[a]));
+        // Build the result string with sorted percentages
+        StringBuilder result = new StringBuilder();
+        for (int index : indices) {
+            result.append(emotions[index])
+                    .append(": ")
+                    .append(String.format("%.2f", percentages[index]))
+                    .append("%\n");
         }
 
         resultTextView.setText(result.toString());
     }
+
 
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
